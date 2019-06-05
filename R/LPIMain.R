@@ -245,9 +245,7 @@ LPIMain <- function(infile="Infile.txt",
           write.table(minmax, sep=",", eol="\n", f_name,
                       quote = FALSE, append = FALSE, row.names = F, col.names=T)
         }
-        else{
-          MinMaxList[[FileNo]] = minmax
-        }
+        MinMaxList[[FileNo]] = minmax
         processedResult <- ProcessFile(Dataset=DataSet,
                     ref_year=REF_YEAR,
                     MODEL_SELECTION_FLAG=MODEL_SELECTION_FLAG,
