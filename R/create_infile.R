@@ -49,16 +49,23 @@ convert_to_rows <- function(in_data, start_col_name="X1950", end_col_name="X2015
 #' @return Returns the name of the created infile
 #' @export
 #'
-create_infile <- function(pop_data_source, index_vector=TRUE, name="default_infile", start_col_name="X1950", end_col_name="X2015", CUT_OFF_YEAR = 1950) {
+create_infile <- function(pop_data_source, index_vector=TRUE, name="default_infile", start_col_name="X1950", end_col_name="X2015", CUT_OFF_YEAR = 1950, USE_FILES = TRUE) {
   # If no index vector is suppled, it will just use all the pop_data_source data
   pop_data <- pop_data_source[index_vector, ]
   all_data <- convert_to_rows(pop_data, start_col_name, end_col_name)
   non_null_all_data = all_data[!is.na(all_data$pop), ]
   clean_data = non_null_all_data[non_null_all_data$year >= CUT_OFF_YEAR, ]
-  filename <- paste(name, "_pops.txt", sep="")
-  write.table(clean_data, filename, sep="\t", row.names=FALSE, quote = F)
-  # Write infile
-  in_file_data <- data.frame(FileName=filename, Group=1, Weighting=1)
-  write.table(in_file_data, gsub("pops.txt", "infile.txt", filename), sep="\t", row.names=FALSE)
-  return(paste(name, "_infile.txt", sep=""))
+  if(USE_FILES){
+    filename <- paste(name, "_pops.txt", sep="")
+    write.table(clean_data, filename, sep="\t", row.names=FALSE, quote = F)
+    # Write infile
+    in_file_data <- data.frame(FileName=filename, Group=1, Weighting=1)
+    write.table(in_file_data, gsub("pops.txt", "infile.txt", filename), sep="\t", row.names=FALSE)
+    return(paste(name, "_infile.txt", sep=""))    
+  }
+  else{
+    returnData <- list()
+    returnData[[1]] <- list("Data"=clean_data, "Group"=1, "Weighting"=1, "Name"=name)
+    return returnData
+  }
 }

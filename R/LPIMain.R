@@ -43,6 +43,7 @@
 #' @param OFFSET_DIFF
 #' @param LINEAR_MODEL_SHORT_FLAG
 #' @param VERBOSE Whether to print verbose information. Default=1
+#' @param USE_FILES whethere to use files (infile + write to disk). Default = FALSE 
 #' @return lpi - A data frame containing an LPI and CIs if calculated
 #' @examples
 #'
@@ -106,7 +107,8 @@ LPIMain <- function(infile="Infile.txt",
                     LINEAR_MODEL_SHORT_FLAG = FALSE, # if=TRUE models short time-series with linear model
                     CAP_LAMBDAS = TRUE,
                     VERBOSE = TRUE,
-                    SHOW_PROGRESS=TRUE) {
+                    SHOW_PROGRESS=TRUE,
+                    USE_FILES = TRUE) {
 
     # Start timing
     ptm <- proc.time()
@@ -115,36 +117,43 @@ LPIMain <- function(infile="Infile.txt",
     `%op%` <- if (goParallel) foreach::`%dopar%` else foreach::`%do%`
     doParallel::registerDoParallel()
 
-    # RF: Create a working directory to put files in
-    success = dir.create(basedir, showWarnings = FALSE)
-    if (success) {
-      print(sprintf("** Created folder: %s", basedir))
+    if(USE_FILES){
+      # RF: Create a working directory to put files in
+      success = dir.create(basedir, showWarnings = FALSE)
+      if (success) {
+        print(sprintf("** Created folder: %s", basedir))
+      }
+      dir.create(file.path(basedir, 'lpi_temp'), showWarnings = FALSE)
+      if (success) {
+        print(sprintf("** Created folder: %s", file.path(basedir, 'lpi_temp')))
+      }
+      # RF: Get list of input files
+      FileTable = read.table(infile, header = TRUE)
+      FileNames = FileTable$FileName
+      Group = FileTable[2]
+      GroupList = unique(Group[[1]])
+      Weightings = FileTable[3]
+      WeightingsA <- Weightings
+      FileWeightingsB = FileTable[4]
+      # Number of files is the size of the maximum dimension of Group
+      NoFiles = max(dim(Group))   
     }
-    dir.create(file.path(basedir, 'lpi_temp'), showWarnings = FALSE)
-    if (success) {
-      print(sprintf("** Created folder: %s", file.path(basedir, 'lpi_temp')))
+    else{
+      Group = lapply(infile, function(x) x$Group)
+      FileNames = lapply(infile, function(x) x$Name)
+      GroupList = unique(Group[[1]])
+      Weightings = lapply(infile, function(x) x$Weighting)
+      WeightingsA <- Weightings
+      FileWeightingsB = lapply(infile, function(x) x$WeightingB)
+      ### Not sure why it has to be from Group
+      NoFiles = length(infile)
+      save_plots = FALSE
+      plot_lpi = FALSE
     }
-
-    # RF: Get list of input files
-    FileTable = read.table(infile, header = TRUE)
-    # RF: Get names from file
-    FileNames = FileTable$FileName
-    # Get groups from file as column vector
-    Group = FileTable[2]
-
-    GroupList = unique(Group[[1]])
-
-    #print(Group)
-
-    Weightings = FileTable[3]
-
     # RF: Get weightings from file
     if (use_weightings == 1) {
-      WeightingsA = FileTable[3]
-
       #Weightings = Weightings/sum(Weightings)
       cat(sprintf("Weightings...\n"))
-
       # Make sure group weightings normalise
       for (i in 1:length(GroupList)) {
         print(paste("Group:", GroupList[i]))
@@ -158,27 +167,20 @@ LPIMain <- function(infile="Infile.txt",
       }
       cat("\n")
     }
-
     if (use_weightings_B == 1) {
       # RF: Get weightings from file
-        FileWeightingsB = FileTable[4]
-        WeightingsB = unique(cbind(Group, FileWeightingsB))$WeightingB
-        #WeightingsB = WeightingsB/sum(WeightingsB)
-        cat(sprintf("WeightingsB...\n"))
-        print(WeightingsB)
-        cat("\n")
+      WeightingsB = unique(cbind(Group, FileWeightingsB))$WeightingB
+      #WeightingsB = WeightingsB/sum(WeightingsB)
+      cat(sprintf("WeightingsB...\n"))
+      print(WeightingsB)
+      cat("\n")
     }
-
-
     # Find max of group to get number of groups
     NoGroups = length(unique(Group[[1]]))
-
     cat("Number of groups: ", NoGroups, '\n')
 
     # CI_FLAG and the Switchpointflag were here
 
-    # Number of files is the size of the maximum dimension of Group
-    NoFiles = max(dim(Group))
 
     #DSize = 0
     # Create empty matrix to store size of lambdas (number of years) for each species
@@ -186,20 +188,67 @@ LPIMain <- function(infile="Infile.txt",
 
     #writeLines(c(""), "progress_log_files.txt")
 
+    # Get largest dimension size
+    #DSize = max(DSizes)
+    # *******
+    # Trying this - don't know why it wouldn't be ok, just means we're only processing lamdas that
+    # we're going to plot?
+    # *******
+    DSize = PLOT_MAX - REF_YEAR + 2
+        # Create an empty data frame (create matrix, then convert) to put species lambdas in
+    # Here we create a data fram with no rows, then use rbind.fill to add to it (which will
+    # create NAs for missing columns)
+    #SpeciesLambdaArrayTemp = matrix(data=NA,nrow=0,ncol=DSize)
+    # Not quite sure why this needs to be transposed as it's empty and has the right dims, but it does
+    SpeciesLambdaArray = data.frame(NULL)
+    SpeciesNamesArray = data.frame(NULL)
+    MinMaxList = list()
+    # Create empty (NAs) DTemp array
+    DTempArrayTemp <- matrix(data=NA,nrow=NoFiles,ncol=DSize)
+    DTempArray = data.frame(DTempArrayTemp)
+
+    DataSizeArray = matrix(0, NoFiles, 2)
+
+    fileindex = NULL
+
     #DSizes <- foreach (FileNo = 1:NoFiles,.combine=cbind) %dopar% {
     DSizes <- foreach::foreach (FileNo = 1:NoFiles,.combine=cbind) %op% {
       #sink("progress_log_files.txt", append=TRUE)
-      # Check MD5 here to see if file already processed:
-      md5val <- tools::md5sum(toString(FileNames[FileNo]))
-      if (
-            (force_recalculation == 1) ||
+      redo_calculation <- FALSE
+      if(USE_FILES){
+        # Check MD5 here to see if file already processed:
+        md5val <- tools::md5sum(toString(FileNames[FileNo]))
+        redo_calculation <- (force_recalculation == 1) ||
             (!file.exists(file.path(basedir, "lpi_temp", paste0(md5val, "_dtemp.csv")))) ||
             (!file.exists(file.path(basedir, "lpi_temp", paste0(md5val, "_splambda.csv"))))
-        ) {
+      }
+      else{
+        redo_calculation <- TRUE
+      }
+      
+      if (redo_calculation) 
+      {
         #DSizes[FileNo] = ProcessFile(toString(FileNames[FileNo]), FileNo)
-        cat(sprintf("processing file: %s\n", toString(FileNames[FileNo])))
-
-        ProcessFile(DatasetName=toString(FileNames[FileNo]),
+        if(USE_FILES){
+          cat(sprintf("processing file: %s\n", toString(FileNames[FileNo])))
+          Dataset=toString(FileNames[FileNo])
+        }
+        else{
+          DataSet=infile[[FileNo]]$Data
+        }
+        colnames(DataSet) <- c("Binomial", "ID", "year", "popvalue")
+        ### for min max thingy
+        minmax <- plyr::ddply(DataSet, "ID", plyr::summarise, min_year = min(year), max_year = max(year))
+        if(USE_FILES){
+          f_name = file.path(basedir, gsub(".txt", "_Minmax.txt", Dataset))
+          cat("Saving Min/Max file to: ", f_name, "\n")
+          write.table(minmax, sep=",", eol="\n", f_name,
+                      quote = FALSE, append = FALSE, row.names = F, col.names=T)
+        }
+        else{
+          MinMaxList[[FileNo]] = minmax
+        }
+        processedResult <- ProcessFile(Dataset=DataSet,
                     ref_year=REF_YEAR,
                     MODEL_SELECTION_FLAG=MODEL_SELECTION_FLAG,
                     GAM_GLOBAL_FLAG=GAM_GLOBAL_FLAG,
@@ -216,78 +265,56 @@ LPIMain <- function(infile="Infile.txt",
                     LINEAR_MODEL_SHORT_FLAG=LINEAR_MODEL_SHORT_FLAG,
                     CAP_LAMBDAS=CAP_LAMBDAS,
                     SHOW_PROGRESS=SHOW_PROGRESS,
+                    USE_FILES = USE_FILES,
                     basedir=basedir)
         #cat("done processing file: ", toString(FileNames[FileNo]))
+      } # dont re-do calculation
+      if(USE_FILES){
+        # Read SpeciesLambda and DTemp from saved files
+        FileName = file.path(basedir, "lpi_temp", paste0(md5val, "_splambda.csv"))
+        SpeciesLambda = read.table(FileName, header = FALSE, sep = ",")
+        debug_print(VERBOSE, sprintf("Loading previously analysed species lambda file for '%s' from MD5 hash: %s\n", as.character(FileNames[FileNo]), FileName))
+        species_names = read.table(file.path(basedir, "lpi_temp/SpeciesName.txt"))
+        cat(sprintf("%s, Number of species: %s\n", as.character(FileNames[FileNo]), dim(SpeciesLambda)[1]))
+        # Add this species data to the array of all data
+        #cat(dim(SpeciesLambdaArray), "\n")
+        SpeciesLambdaArray <- plyr::rbind.fill(SpeciesLambdaArray, SpeciesLambda)
+        SpeciesNamesArray <- plyr::rbind.fill(SpeciesNamesArray, species_names)
+        #cat(dim(SpeciesLambdaArray), "\n")
+        # Keep note of which file that data was from (to use as an index later)
+        fileindex = c(fileindex, rep(FileNo, dim(SpeciesLambda)[1]))
+        #cat(length(fileindex), "\n")
+        # DTemps are the mean annual differences in population for each group/file
+        FileName = file.path(basedir, "lpi_temp", paste0(md5val, "_dtemp.csv"))
+        debug_print(VERBOSE, sprintf("Loading previously analysed dtemp file from MD5 hash: %s\n", FileName))
+        #DTemp = read.table(FileName, header = F, sep = ",", col.names = FALSE)
+        DTemp = read.table(FileName, header = T, sep = ",")
+        #print(DTemp)
+        #DTemp = as.numeric(DTemp)
+        DTempArray[FileNo, 1:dim(DTemp)[2]] = t(DTemp)
+      }
+      else{
+        SpeciesLambda = processedResult$SpeciesLambda
+        species_names = processedResult$SpeciesName
+        DTemp = processedResult$DTemp
+        SpeciesLambdaArray <- plyr::rbind.fill(SpeciesLambdaArray, SpeciesLambda)
+        SpeciesNamesArray <- plyr::rbind.fill(SpeciesNamesArray, species_names)
+        fileindex = c(fileindex, rep(FileNo, dim(SpeciesLambda)[1]))        
+        DTempArray[FileNo, 1:dim(DTemp)[2]] = t(DTemp)
       }
       #sink()
-    }
-
-    # Get largest dimension size
-    #DSize = max(DSizes)
-    # *******
-    # Trying this - don't know why it wouldn't be ok, just means we're only processing lamdas that
-    # we're going to plot?
-    # *******
-    DSize = PLOT_MAX - REF_YEAR + 2
-
-    # Create an empty data frame (create matrix, then convert) to put species lambdas in
-    # Here we create a data fram with no rows, then use rbind.fill to add to it (which will
-    # create NAs for missing columns)
-    #SpeciesLambdaArrayTemp = matrix(data=NA,nrow=0,ncol=DSize)
-    # Not quite sure why this needs to be transposed as it's empty and has the right dims, but it does
-    SpeciesLambdaArray = data.frame(NULL)
-    SpeciesNamesArray = data.frame(NULL)
-
-    # Create empty (NAs) DTemp array
-    DTempArrayTemp <- matrix(data=NA,nrow=NoFiles,ncol=DSize)
-    DTempArray = data.frame(DTempArrayTemp)
-
-    DataSizeArray = matrix(0, NoFiles, 2)
-
-    fileindex = NULL
-
-    for (FileNo in 1:NoFiles) {
-
-      md5val <- tools::md5sum(toString(as.character(FileNames[FileNo])))
-      # Read SpeciesLambda and DTemp from saved files
-
-      FileName = file.path(basedir, "lpi_temp", paste0(md5val, "_splambda.csv"))
-      SpeciesLambda = read.table(FileName, header = FALSE, sep = ",")
-      debug_print(VERBOSE, sprintf("Loading previously analysed species lambda file for '%s' from MD5 hash: %s\n", as.character(FileNames[FileNo]), FileName))
-
-      species_names = read.table(file.path(basedir, "lpi_temp/SpeciesName.txt"))
-
-      cat(sprintf("%s, Number of species: %s\n", as.character(FileNames[FileNo]), dim(SpeciesLambda)[1]))
-
-      # Add this species data to the array of all data
-      #cat(dim(SpeciesLambdaArray), "\n")
-      SpeciesLambdaArray <- plyr::rbind.fill(SpeciesLambdaArray, SpeciesLambda)
-      SpeciesNamesArray <- plyr::rbind.fill(SpeciesNamesArray, species_names)
-      #cat(dim(SpeciesLambdaArray), "\n")
-      # Keep note of which file that data was from (to use as an index later)
-      fileindex = c(fileindex, rep(FileNo, dim(SpeciesLambda)[1]))
-      #cat(length(fileindex), "\n")
-      # DTemps are the mean annual differences in population for each group/file
-      FileName = file.path(basedir, "lpi_temp", paste0(md5val, "_dtemp.csv"))
-      debug_print(VERBOSE, sprintf("Loading previously analysed dtemp file from MD5 hash: %s\n", FileName))
-      #DTemp = read.table(FileName, header = F, sep = ",", col.names = FALSE)
-      DTemp = read.table(FileName, header = T, sep = ",")
-
-      #print(DTemp)
-      #DTemp = as.numeric(DTemp)
-      DTempArray[FileNo, 1:dim(DTemp)[2]] = t(DTemp)
     }
 
     #cat("DTempArray: \n")
     #print(DTempArray)
     #cat("\n...DTempArray: \n")
 
-
-    #write.table(DTempArray, file="dtemp_array.txt")
-    f_name = file = file.path(basedir, gsub(".txt", "_dtemp_array.txt", infile))
-    cat("Saving DTemp Array to file: ", f_name, "\n")
-    write.table(DTempArray, f_name)
-
+    if(USE_FILES){
+      #write.table(DTempArray, file="dtemp_array.txt")
+      f_name = file = file.path(basedir, gsub(".txt", "_dtemp_array.txt", infile))
+      cat("Saving DTemp Array to file: ", f_name, "\n")
+      write.table(DTempArray, f_name)
+    }
     dtemp_df <- data.frame(filenames=FileNames, dtemps=DTempArray)
     colnames(dtemp_df) <- c("filename", seq(REF_YEAR, REF_YEAR + DSize - 1))
 
@@ -311,9 +338,12 @@ LPIMain <- function(infile="Infile.txt",
       dev.off()
     }
 
-    f_name = file = file.path(basedir, gsub(".txt", "_dtemp_array_named.csv", infile))
-    cat("Saving DTemp Array with filesnames to file: ", f_name, "\n")
-    write.csv(dtemp_df, f_name, row.names = FALSE)
+    if(USE_FILES){
+      f_name = file = file.path(basedir, gsub(".txt", "_dtemp_array_named.csv", infile))
+      cat("Saving DTemp Array with filesnames to file: ", f_name, "\n")
+      write.csv(dtemp_df, f_name, row.names = FALSE)
+
+    }
 
     t1 <- proc.time() - ptm
     cat(sprintf("[Calculating LPI...] System: %f, User: %f, Elapsed: %f\n", t1[1], t1[2], t1[3]))
@@ -452,7 +482,9 @@ LPIMain <- function(infile="Infile.txt",
       #leverage_results_table$total <- rowSums(leverage_results_table)
 
       leverage_results_table$id <- unlist(leverage_species)
-      write.csv(leverage_results_table, file=file.path(basedir, "species_leverage_lpi_results.csv"))
+      if(USE_FILES)
+        write.csv(leverage_results_table, file=file.path(basedir, "species_leverage_lpi_results.csv"))
+      
 
       leverage_diff_table <- data.frame(leverage_diff)
       colnames(leverage_diff_table) <- seq(REF_YEAR, REF_YEAR + DSize - 1)
@@ -460,7 +492,8 @@ LPIMain <- function(infile="Infile.txt",
       leverage_diff_table$total <- rowSums(leverage_diff_table)
 
       leverage_diff_table$id <- unlist(leverage_species)
-      write.csv(leverage_diff_table, file=file.path(basedir, "species_leverage_diff_lambdas_results.csv"))
+      if(USE_FILES)
+        write.csv(leverage_diff_table, file=file.path(basedir, "species_leverage_diff_lambdas_results.csv"))
     }
 
     if (SWITCH_PT_FLAG == 1) {
@@ -556,8 +589,6 @@ LPIMain <- function(infile="Infile.txt",
 
     if (plot_lpi) {
       if (CI_FLAG == 1) {
-
-
           # Plot the index with confidence intervals
           plot_lpi(Ifinal, REF_YEAR, PLOT_MAX, CI_FLAG, lowerCI, upperCI)
 
@@ -591,40 +622,9 @@ LPIMain <- function(infile="Infile.txt",
     rownames(LPIdata) <- seq(REF_YEAR, REF_YEAR + DSize - 1)
 
     f_name = file = file.path(basedir, gsub(".txt", "_Results.txt", infile))
-    cat("Saving final output to file: ", f_name, "\n")
-    write.table(LPIdata, f_name)
-
-    #cat("[Min/Max] Create min/max file\n")
-    # create minmax file
-
-    # RF: Get list of input files
-    FileTable = read.table(infile, header = TRUE)
-    # RF: Get names from file
-    FileNames = FileTable$FileName
-    # Get groups from file as column vector
-    Group = FileTable[2]
-    # Find max of group to get number of groups
-    #NoGroups = max(Group)
-    NoGroups = length(unique(Group))
-    # Number of files is the size of the maximum dimension of Group
-    NoFiles = max(dim(Group))
-
-    for (FileNo in 1:NoFiles) {
-      Dataset <- toString(FileNames[FileNo])
-      #cat(Dataset, "\n")
-      Data <- read.table(Dataset, header = TRUE)
-      colnames(Data) <- c("Binomial", "ID", "year", "popvalue")
-
-      # bit of a hack to avoid R CMD CHECK, sets variable 'year' used in ddply to be NULL
-      year <- NULL
-
-      minmax <- plyr::ddply(Data, "ID", plyr::summarise, min_year = min(year), max_year = max(year))
-      #minmax <- tapply(Data$ID, Data$year, range)
-      #my.out <- do.call("rbind", minmax)
-      f_name = file = file.path(basedir, gsub(".txt", "_Minmax.txt", Dataset))
-      cat("Saving Min/Max file to: ", f_name, "\n")
-      write.table(minmax, sep=",", eol="\n", f_name,
-                  quote = FALSE, append = FALSE, row.names = F, col.names=T)
+    if(USE_FILES){
+      cat("Saving final output to file: ", f_name, "\n")
+      write.table(LPIdata, f_name)      
     }
 
 
@@ -645,5 +645,5 @@ LPIMain <- function(infile="Infile.txt",
     cat(sprintf("[END] System: %f, User: %f, Elapsed: %f\n", t1[1], t1[2], t1[3]))
     # Stop timing
 
-    return(LPIdata)
+    return list("LPIdata": LPIdata, "minmax": MinMaxList)
 }
