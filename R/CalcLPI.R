@@ -505,7 +505,7 @@ CalcLPI <- function(Species,
     write.table(SpeciesData,sep=",", eol="\n", file=lambda_filename, quote=FALSE, col.names=FALSE, row.names = FALSE, append=TRUE)    
   }
   #sp_df = melt(SpeciesData)
-  return list("SpeciesLambda"=SpeciesLambda, "SpeciesName"=sNamesArray1)
+  return (list("SpeciesLambda"=SpeciesLambda, "SpeciesName"=sNamesArray1))
   # MethodFlag
 }
 

@@ -182,7 +182,7 @@ ProcessFile <-function(Dataset,
     return(dim(SpeciesLambda)[2])
   }
   else{
-    return c("SpeciesLambda"=SpeciesLambda, "DTemp"=DTemp, "SpeciesName"=lpiResult$SpeciesName)
+    return (list("SpeciesLambda"=SpeciesLambda, "DTemp"=DTemp, "SpeciesName"=lpiResult$SpeciesName))
   }
   
 }

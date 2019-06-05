@@ -643,5 +643,5 @@ LPIMain <- function(infile="Infile.txt",
     cat(sprintf("[END] System: %f, User: %f, Elapsed: %f\n", t1[1], t1[2], t1[3]))
     # Stop timing
 
-    return list("LPIdata": LPIdata, "minmax": MinMaxList)
+    return (list("LPIdata": LPIdata, "minmax": MinMaxList))
 }

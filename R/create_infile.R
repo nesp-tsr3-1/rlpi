@@ -66,6 +66,6 @@ create_infile <- function(pop_data_source, index_vector=TRUE, name="default_infi
   else{
     returnData <- list()
     returnData[[1]] <- list("Data"=clean_data, "Group"=1, "Weighting"=1, "Name"=name)
-    return returnData
+    return (returnData)
   }
 }
