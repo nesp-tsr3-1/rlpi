@@ -9,7 +9,7 @@
 #' @param Popvalue - Vector of population values
 #' @param InitialYear - Initial year to calculate the index from
 #' @param FinalYear - Final year to calculate the index to
-#' @param DatasetName - Name of the dataset that these value are from (for generating output files)
+#' @param Dataset - Name of the dataset that these value are from (for generating output files)
 #' @param MODEL_SELECTION_FLAG Default=0
 #' @param GAM_GLOBAL_FLAG  1 = process by GAM method, 0 = process by chain method. Default=1
 #' @param DATA_LENGTH_MIN Minimum data length to include in calculations. Default=2
@@ -32,7 +32,7 @@ CalcLPI <- function(Species,
                     Popvalue,
                     InitialYear,
                     FinalYear,
-                    DatasetName,
+                    Dataset,
                     MODEL_SELECTION_FLAG, # determines whether we approve the models or the code does it automatically
                     GAM_GLOBAL_FLAG,  # 1 = process by GAM method, 0 = process by chain method
                     DATA_LENGTH_MIN,
@@ -408,10 +408,10 @@ CalcLPI <- function(Species,
     # Save the population lamdas to a file:
 
     PopData<-cbind(as.vector(PopID), PopLambda)
-    pop_lambda_filename <- file.path(basedir, gsub(".txt", "_PopLambda.txt", DatasetName))
     #Pop_Headers<-t(c("population_id", as.vector(InitialYear:FinalYear)))
     #write.table(Pop_Headers,file=pop_lambda_filename, sep=",", eol="\n", quote=FALSE, col.names=FALSE, row.names = FALSE)
     if(USE_FILES){
+      pop_lambda_filename <- file.path(basedir, gsub(".txt", "_PopLambda.txt", Dataset))
       write.table(PopData,sep=",", eol="\n", file=pop_lambda_filename, quote=FALSE, col.names=FALSE, row.names = FALSE, append=TRUE)
     }
 
@@ -500,7 +500,7 @@ CalcLPI <- function(Species,
   #SpeciesData<-cbind(sIDArray, as.vector(sNamesT), SpeciesLambda)
   SpeciesData<-cbind(as.vector(sNamesArray), SpeciesLambda)
   if(USE_FILES){
-    lambda_filename <- file.path(basedir, gsub(".txt", "_Lambda.txt", DatasetName))
+    lambda_filename <- file.path(basedir, gsub(".txt", "_Lambda.txt", Dataset))
     write.table(Headers,file=lambda_filename, sep=",", eol="\n", quote=FALSE, col.names=FALSE, row.names = FALSE)
     write.table(SpeciesData,sep=",", eol="\n", file=lambda_filename, quote=FALSE, col.names=FALSE, row.names = FALSE, append=TRUE)    
   }

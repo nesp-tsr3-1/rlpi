@@ -134,7 +134,8 @@ LPIMain <- function(infile="Infile.txt",
       GroupList = unique(Group[[1]])
       Weightings = FileTable[3]
       WeightingsA <- Weightings
-      FileWeightingsB = FileTable[4]
+      if (use_weightings_B)
+        FileWeightingsB = FileTable[4]
       # Number of files is the size of the maximum dimension of Group
       NoFiles = max(dim(Group))   
     }
@@ -144,7 +145,8 @@ LPIMain <- function(infile="Infile.txt",
       GroupList = unique(Group[[1]])
       Weightings = lapply(infile, function(x) x$Weighting)
       WeightingsA <- Weightings
-      FileWeightingsB = lapply(infile, function(x) x$WeightingB)
+      if (use_weightings_B)
+        FileWeightingsB = lapply(infile, function(x) x$WeightingB)
       ### Not sure why it has to be from Group
       NoFiles = length(infile)
       save_plots = FALSE
@@ -231,7 +233,7 @@ LPIMain <- function(infile="Infile.txt",
         #DSizes[FileNo] = ProcessFile(toString(FileNames[FileNo]), FileNo)
         if(USE_FILES){
           cat(sprintf("processing file: %s\n", toString(FileNames[FileNo])))
-          Dataset=toString(FileNames[FileNo])
+          DataSet=toString(FileNames[FileNo])
         }
         else{
           DataSet=infile[[FileNo]]$Data
@@ -240,7 +242,7 @@ LPIMain <- function(infile="Infile.txt",
         ### for min max thingy
         minmax <- plyr::ddply(DataSet, "ID", plyr::summarise, min_year = min(year), max_year = max(year))
         if(USE_FILES){
-          f_name = file.path(basedir, gsub(".txt", "_Minmax.txt", Dataset))
+          f_name = file.path(basedir, gsub(".txt", "_Minmax.txt", DataSet))
           cat("Saving Min/Max file to: ", f_name, "\n")
           write.table(minmax, sep=",", eol="\n", f_name,
                       quote = FALSE, append = FALSE, row.names = F, col.names=T)

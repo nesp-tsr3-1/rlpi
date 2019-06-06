@@ -43,7 +43,7 @@ ProcessFile <-function(Dataset,
     Data = read.table(Dataset, header = TRUE)    
   }
   else{
-    Data = DataSet
+    Data = Dataset
   }
 
   # Get data from file as column vectors
