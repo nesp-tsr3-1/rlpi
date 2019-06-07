@@ -37,32 +37,31 @@ ProcessFile <-function(Dataset,
                        SHOW_PROGRESS,
                        USE_FILES = TRUE,
                        basedir) {
+  cat("@ProcessFile\n")
   if(USE_FILES){
     md5val <- tools::md5sum(Dataset)
     # Read data file
-    Data = read.table(Dataset, header = TRUE)    
-  }
-  else{
+    Data = read.table(Dataset, header = TRUE)
+    YearSSet = Data[3]
+  } else {
     Data = Dataset
+    YearSSet = sapply(Data[3], as.numeric)
   }
-
-  # Get data from file as column vectors
   SpeciesSSet = Data[1]
   IDSSet = Data[2]
-  YearSSet = Data[3]
   PopvalueSSet = Data[4]
-
   # Forget 'data' variable
   rm(Data)
-
   FinalYear = max(YearSSet)
-
   # Note that data could be later than ref_year
-  if (min(YearSSet) < ref_year) {
-    InitialYear = ref_year
-  } else {
-    InitialYear = min(YearSSet)
-  }
+  #if (min(YearSSet) < ref_year) {
+  # InitialYear = ref_year
+  #} else {
+  #  InitialYear = min(YearSSet)
+  #}
+  ####
+  # Hoang: not sure why previous block was needed while InitialYear is set to ref_year anyway :(
+  ####
   InitialYear = ref_year
 
   # Call the LPI function sNames = unique(SpeciesSSet); noSpecies = max(dim(sNames))
@@ -151,7 +150,9 @@ ProcessFile <-function(Dataset,
       # DTemp is mean lambda for those populations
       DTemp[I] = mean(YearData[Index])
       # Otherwise -99
-    } else DTemp[I] = -99
+    } else { 
+      DTemp[I] = -99
+    }
   }
 
   if(USE_FILES){
@@ -180,8 +181,7 @@ ProcessFile <-function(Dataset,
     # Return length of lamda array (number of lamda values?)
     #cat("Returning length of lambda\n")
     return(dim(SpeciesLambda)[2])
-  }
-  else{
+  } else {
     return (list("SpeciesLambda"=SpeciesLambda, "DTemp"=DTemp, "SpeciesName"=lpiResult$SpeciesName))
   }
   

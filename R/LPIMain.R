@@ -136,22 +136,23 @@ LPIMain <- function(infile="Infile.txt",
       WeightingsA <- Weightings
       if (use_weightings_B)
         FileWeightingsB = FileTable[4]
-      # Number of files is the size of the maximum dimension of Group
-      NoFiles = max(dim(Group))   
-    }
-    else{
+    } else {
       Group = lapply(infile, function(x) x$Group)
+      Group = array(unlist(Group),c(1,1))
       FileNames = lapply(infile, function(x) x$Name)
+      FileNames = array(unlist(FileNames), c(1,1))
       GroupList = unique(Group[[1]])
       Weightings = lapply(infile, function(x) x$Weighting)
+      Weightings = array(unlist(Weightings), c(1,1))
       WeightingsA <- Weightings
-      if (use_weightings_B)
+      if (use_weightings_B){
         FileWeightingsB = lapply(infile, function(x) x$WeightingB)
-      ### Not sure why it has to be from Group
-      NoFiles = length(infile)
+        FileWeightingsB = array(unlist(FileWeightingsB), c(1,1))
+      }
       save_plots = FALSE
       plot_lpi = FALSE
     }
+    NoFiles = max(dim(Group))
     # RF: Get weightings from file
     if (use_weightings == 1) {
       #Weightings = Weightings/sum(Weightings)
@@ -223,8 +224,7 @@ LPIMain <- function(infile="Infile.txt",
         redo_calculation <- (force_recalculation == 1) ||
             (!file.exists(file.path(basedir, "lpi_temp", paste0(md5val, "_dtemp.csv")))) ||
             (!file.exists(file.path(basedir, "lpi_temp", paste0(md5val, "_splambda.csv"))))
-      }
-      else{
+      } else {
         redo_calculation <- TRUE
       }
       
@@ -234,13 +234,15 @@ LPIMain <- function(infile="Infile.txt",
         if(USE_FILES){
           cat(sprintf("processing file: %s\n", toString(FileNames[FileNo])))
           DataSet=toString(FileNames[FileNo])
-        }
-        else{
+	  Data <- read.table(DataSet, header = TRUE)
+	  minmax <- plyr::ddply(Data, "ID", plyr::summarise, min_year = min(year), max_year = max(year))
+        } else {
           DataSet=infile[[FileNo]]$Data
+          colnames(DataSet) <- c("Binomial", "ID", "year", "popvalue")
+          minmax <- plyr::ddply(DataSet, "ID", plyr::summarise, min_year = min(year), max_year = max(year))
         }
-        colnames(DataSet) <- c("Binomial", "ID", "year", "popvalue")
         ### for min max thingy
-        minmax <- plyr::ddply(DataSet, "ID", plyr::summarise, min_year = min(year), max_year = max(year))
+	cat ("Finding min-max")
         if(USE_FILES){
           f_name = file.path(basedir, gsub(".txt", "_Minmax.txt", DataSet))
           cat("Saving Min/Max file to: ", f_name, "\n")
@@ -248,6 +250,7 @@ LPIMain <- function(infile="Infile.txt",
                       quote = FALSE, append = FALSE, row.names = F, col.names=T)
         }
         MinMaxList[[FileNo]] = minmax
+        cat("start processing fileno: ", toString(FileNo), "\n")
         processedResult <- ProcessFile(Dataset=DataSet,
                     ref_year=REF_YEAR,
                     MODEL_SELECTION_FLAG=MODEL_SELECTION_FLAG,
@@ -267,7 +270,7 @@ LPIMain <- function(infile="Infile.txt",
                     SHOW_PROGRESS=SHOW_PROGRESS,
                     USE_FILES = USE_FILES,
                     basedir=basedir)
-        #cat("done processing file: ", toString(FileNames[FileNo]))
+        cat("done processing fileno: ", toString(FileNo), "\n")
       } # dont re-do calculation
       if(USE_FILES){
         # Read SpeciesLambda and DTemp from saved files
@@ -292,11 +295,10 @@ LPIMain <- function(infile="Infile.txt",
         #print(DTemp)
         #DTemp = as.numeric(DTemp)
         DTempArray[FileNo, 1:dim(DTemp)[2]] = t(DTemp)
-      }
-      else{
-        SpeciesLambda = processedResult$SpeciesLambda
-        species_names = processedResult$SpeciesName
-        DTemp = processedResult$DTemp
+      } else {
+        SpeciesLambda = as.data.frame(processedResult$SpeciesLambda)
+        species_names = as.data.frame(processedResult$SpeciesName)
+        DTemp = as.data.frame(processedResult$DTemp)
         SpeciesLambdaArray <- plyr::rbind.fill(SpeciesLambdaArray, SpeciesLambda)
         SpeciesNamesArray <- plyr::rbind.fill(SpeciesNamesArray, species_names)
         fileindex = c(fileindex, rep(FileNo, dim(SpeciesLambda)[1]))        
@@ -645,5 +647,5 @@ LPIMain <- function(infile="Infile.txt",
     cat(sprintf("[END] System: %f, User: %f, Elapsed: %f\n", t1[1], t1[2], t1[3]))
     # Stop timing
 
-    return (list("LPIdata": LPIdata, "minmax": MinMaxList))
+    return (list("LPIdata" = LPIdata, "minmax" = MinMaxList))
 }
