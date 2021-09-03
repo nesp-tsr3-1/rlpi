@@ -68,7 +68,7 @@ ggplot_lambdas <- function(lambda_values, col = "red", line_col = "blue", title 
     geom_errorbar(aes(ymin = lower_limit, ymax = upper_limit), colour = line_col, width = .3) +
     geom_point(size = 2, shape = 21, fill = col, col = col) +
     coord_cartesian(ylim = ylims, xlim = xlims) +
-    xlab("Years") +
+    xlab("years") +
     ylab(paste("Lambda values (", baseline, " = stable)", sep = "")) +
     ggtitle(title) +
     scale_x_continuous(limits = xlims, breaks = seq(xlims[1], xlims[2], yrbreaks), expand = c(0, 0)) + # Set tick every 5 years

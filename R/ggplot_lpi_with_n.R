@@ -13,14 +13,14 @@ ggplot_lpi_withN <- function(d, col = "black", title = "", y_min = 0, y_max = 2)
 
   # Bit of a hack to avoid NOTE during R CMD check
   # Sets the variables used in ggplot2::aes to NULL
-  Years <- LPI <- group <- lwr <- upr <- Count <- name <- r <- NULL
+  years <- LPI <- group <- lwr <- upr <- Count <- name <- r <- NULL
 
   df <- data.frame(years = as.numeric(as.character(rownames(d))), lpi = d$LPI_final, lwr = d$CI_low, upr = d$CI_high)
 
   grid::grid.newpage()
 
   # two plots
-  p1 <- ggplot2::ggplot(data = df, ggplot2::aes(x = Years, y = LPI, group = 1)) +
+  p1 <- ggplot2::ggplot(data = df, ggplot2::aes(x = years, y = LPI, group = 1)) +
     ggplot2::geom_hline(yintercept = 1) +
     ggplot2::geom_line(size = 1) +
     ggplot2::geom_ribbon(data = df, ggplot2::aes(ymin = lwr, ymax = upr, group = 1), alpha = 0.3, fill = col) +
@@ -30,7 +30,7 @@ ggplot_lpi_withN <- function(d, col = "black", title = "", y_min = 0, y_max = 2)
     ggplot2::ylab("Index (1970=1.0)") +
     ggplot2::theme(panel.background = ggplot2::element_rect(fill = NA))
 
-  p2 <- ggplot2::ggplot(data = df, ggplot2::aes(x = Years, y = LPI, group = 1)) +
+  p2 <- ggplot2::ggplot(data = df, ggplot2::aes(x = years, y = LPI, group = 1)) +
     ggplot2::geom_point(size = 3, alpha = 0.1, ggplot2::aes(y = Count), color = "black") +
     ggplot2::scale_y_continuous(breaks = seq(0, max(Count), by = 250)) +
     ggplot2::theme(

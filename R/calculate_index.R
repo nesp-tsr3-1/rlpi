@@ -1,47 +1,47 @@
-#' Calculate the index using the annual differences in DTempArray
+#' Calculate the index using the annual differences in dtemp_array
 #'
-#' @param DTempArray Array of DTemps (annual differences)
+#' @param dtemp_array Array of DTemps (annual differences)
 #' @param fileindex The index of the file that this index is for
-#' @param DSize The size of the data in DTemp
-#' @param Group Which group this file belongs to
-#' @param Weightings What the weightings are for this group
+#' @param dsize The size of the data in DTemp
+#' @param group Which group this file belongs to
+#' @param weightings What the weightings are for this group
 #' @param use_weightings Whether or not to use weightings (level 1)
-#' @param use_weightings_B Whether or not to use weightings (level 1)
-#' @param WeightingsB What the weightingsB are for this group
+#' @param use_weightings_b Whether or not to use weightings (level 1)
+#' @param weightings_b What the weightingsB are for this group
 #'
 #' @return index - the calculated index
 #' @export
 #'
-calculate_index <- function(DTempArray, fileindex, DSize, Group, Weightings, use_weightings, use_weightings_B, WeightingsB) {
+calculate_index <- function(dtemp_array, fileindex, dsize, group, weightings, use_weightings, use_weightings_b, weightings_b) {
   # calculate LPI
 
   NoFiles <- length(unique(fileindex))
-  NoGroups <- length(unique(Group[[1]]))
+  Nogroups <- length(unique(group[[1]]))
 
-  I <- matrix(0, DSize)
+  I <- matrix(0, dsize)
   I[1] <- 1
 
   # For each year indexed as 'J'
-  for (J in 2:DSize) {
+  for (J in 2:dsize) {
     # Create two vectors, one for summing 'lambdas' one for counting number summed
-    D <- matrix(0, 1, NoGroups)
-    DI <- matrix(0, 1, NoGroups)
+    D <- matrix(0, 1, Nogroups)
+    DI <- matrix(0, 1, Nogroups)
 
     # cat("DI: ", DI, "\n")
-    # cat("NoGroups: ", NoGroups, "\n")
+    # cat("Nogroups: ", Nogroups, "\n")
     # For each file
     for (FileNo in 1:NoFiles) {
-      GroupNo <- Group[FileNo, 1]
-      # cat("GroupNo: ", GroupNo, "\n")
-      # cat("Group: \n")
-      # print(Group)
-      # Read SpeciesLambda and DTemp from saved file
-      # SpeciesLambdas are the annual differences in population for each species (row for each sp)
-      # SpeciesLambda = SpeciesLambdaArray[fileindex == FileNo, ]
+      groupNo <- group[FileNo, 1]
+      # cat("groupNo: ", groupNo, "\n")
+      # cat("group: \n")
+      # print(group)
+      # Read speciesLambda and DTemp from saved file
+      # speciesLambdas are the annual differences in population for each species (row for each sp)
+      # speciesLambda = species_lambda_array[fileindex == FileNo, ]
 
       # DTemps are the mean annual differences in population for each group/file
       # DTemp for this group/file
-      DTemp <- as.matrix(DTempArray[FileNo, ])
+      DTemp <- as.matrix(dtemp_array[FileNo, ])
 
       # cat("DTemp: ", DTemp, "\n")
 
@@ -51,12 +51,12 @@ calculate_index <- function(DTempArray, fileindex, DSize, Group, Weightings, use
           # or an earlier flag value
           if (DTemp[J] != -99) {
             if (use_weightings == 1) {
-              # cat(sprintf("Using weighting %f for file number %d\n", Weightings[[1]][FileNo], FileNo))
-              D[GroupNo] <- D[GroupNo] + DTemp[J] * Weightings[[1]][FileNo]
+              # cat(sprintf("Using weighting %f for file number %d\n", weightings[[1]][FileNo], FileNo))
+              D[groupNo] <- D[groupNo] + DTemp[J] * weightings[[1]][FileNo]
             } else {
-              D[GroupNo] <- D[GroupNo] + DTemp[J]
+              D[groupNo] <- D[groupNo] + DTemp[J]
             }
-            DI[GroupNo] <- DI[GroupNo] + 1
+            DI[groupNo] <- DI[groupNo] + 1
           }
         }
       }
@@ -85,27 +85,27 @@ calculate_index <- function(DTempArray, fileindex, DSize, Group, Weightings, use
     DI <- 0
     # cat("DT: \n", DT, "\n")
     # cat("DI: \n", DI, "\n")
-    # cat("WeightingsB: \n", WeightingsB, "\n")
-    for (GroupNo in seq(1, NoGroups)) {
+    # cat("weightings_b: \n", weightings_b, "\n")
+    for (groupNo in seq(1, Nogroups)) {
       # CHANGED AS D CAN BE 0 I.E ZERO GROWTH (AVERAGED)
-      # if (D[GroupNo] != 0) {
-      if (use_weightings_B == 1) {
-        # cat(WeightingsB, "\n")
-        if (!is.na(D[GroupNo])) {
-          DT <- DT + D[GroupNo] * WeightingsB[GroupNo]
+      # if (D[groupNo] != 0) {
+      if (use_weightings_b == 1) {
+        # cat(weightings_b, "\n")
+        if (!is.na(D[groupNo])) {
+          DT <- DT + D[groupNo] * weightings_b[groupNo]
           # DI = DI + 1
           # cat("A: ", DT, "\n")
         } else {
-          cat(sprintf("Group %d is NA in year %d\n", GroupNo, J))
+          cat(sprintf("group %d is NA in year %d\n", groupNo, J))
         }
         DI <- 1
       } else {
-        if (!is.na(D[GroupNo])) {
-          DT <- DT + D[GroupNo]
+        if (!is.na(D[groupNo])) {
+          DT <- DT + D[groupNo]
           DI <- DI + 1
           # cat("B: ", DT, "\n")
         } else {
-          cat(sprintf("Group %d is NA in year %d\n", GroupNo, J))
+          cat(sprintf("group %d is NA in year %d\n", groupNo, J))
         }
       }
       # }
@@ -122,12 +122,12 @@ calculate_index <- function(DTempArray, fileindex, DSize, Group, Weightings, use
 
     if (is.na(DT)) {
       I[J] <- NA
-      cat(sprintf("Year %d is NA\n", J))
+      cat(sprintf("year %d is NA\n", J))
     } else {
       if (DI > 0) {
         if (is.na(I[J - 1]) | (I[J - 1] == -99)) {
           I[J] <- 1 * 10^(DT / DI)
-          cat(sprintf("**** [Year %d] Previous year data missing, assuming '1' **** \n", J))
+          cat(sprintf("**** [year %d] Previous year data missing, assuming '1' **** \n", J))
         } else {
           I[J] <- I[J - 1] * 10^(DT / DI)
         }

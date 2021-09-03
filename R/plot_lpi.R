@@ -1,26 +1,26 @@
 #' plot_lpi
 #'
 #' @param index - The index to plot
-#' @param REF_YEAR - The reference year of the plot (index == 1)
-#' @param PLOT_MAX - The max y-value of the plot
-#' @param CI_FLAG - whether confidence intervals are to be plotted
-#' @param lowerCI - lower confidence interval values
-#' @param upperCI - upper confidence interval values
+#' @param ref_year - The reference year of the plot (index == 1)
+#' @param plot_max - The max y-value of the plot
+#' @param ci_flag - whether confidence intervals are to be plotted
+#' @param lower_ci - lower confidence interval values
+#' @param upper_ci - upper confidence interval values
 #' @param col - The color of the plot. Default is "black"
 #'
 #' @export
 #'
-plot_lpi <- function(index, REF_YEAR, PLOT_MAX, CI_FLAG = 0, lowerCI = 0, upperCI = 0, col = "black") {
+plot_lpi <- function(index, ref_year, plot_max, ci_flag = 0, lower_ci = 0, upper_ci = 0, col = "black") {
   # plot the data
-  Year <- seq(REF_YEAR, (REF_YEAR + length(index)) - 1)
-  plot(Year, index, xlim = c(REF_YEAR, PLOT_MAX), ylim = c(0, 2), ylab = paste("Index (", REF_YEAR, "= 1.0)", sep = ""), col = col)
-  # plot(Year, index, xlim = c(REF_YEAR, PLOT_MAX), ylab = paste("Index (", REF_YEAR, " = 1.0)", sep=""))
+  year <- seq(ref_year, (ref_year + length(index)) - 1)
+  plot(year, index, xlim = c(ref_year, plot_max), ylim = c(0, 2), ylab = paste("Index (", ref_year, "= 1.0)", sep = ""), col = col)
+  # plot(year, index, xlim = c(ref_year, plot_max), ylab = paste("Index (", ref_year, " = 1.0)", sep=""))
   zeroEffectLine <- rep(1, (length(index)))
-  lines(Year, zeroEffectLine, col = "black")
-  lines(Year, index, col = col)
+  lines(year, zeroEffectLine, col = "black")
+  lines(year, index, col = col)
 
-  if (CI_FLAG == 1) {
-    lines(Year, lowerCI, col = col)
-    lines(Year, upperCI, col = col)
+  if (ci_flag == 1) {
+    lines(year, lower_ci, col = col)
+    lines(year, upper_ci, col = col)
   }
 }

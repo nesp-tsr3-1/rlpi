@@ -1,51 +1,51 @@
 
 #' bootstrap_lpi
 #'
-#' @param SpeciesLambdaArray - Array of DTemps (annual differences)
+#' @param species_lambda_array - Array of DTemps (annual differences)
 #' @param fileindex The index of the file that this index is for
-#' @param DSize The size of the data in DTemp
-#' @param Group Which group this file belongs to
-#' @param Weightings What the weightings are for this group
+#' @param dsize The size of the data in DTemp
+#' @param group Which group this file belongs to
+#' @param weightings What the weightings are for this group
 #' @param use_weightings Whether or not to use weightings (level 1)
-#' @param use_weightings_B Whether or not to use weightings (level 1)
-#' @param WeightingsB What the weightingsB are for this group
+#' @param use_weightings_b Whether or not to use weightings (level 1)
+#' @param weightings_b What the weightingsB are for this group
 #'
 #' @return Returns a bootstrapped LPI
 #' @export
 #'
-bootstrap_lpi <- function(SpeciesLambdaArray, fileindex, DSize, Group, Weightings, use_weightings, use_weightings_B, WeightingsB, CAP_LAMBDAS) {
+bootstrap_lpi <- function(species_lambda_array, fileindex, dsize, group, weightings, use_weightings, use_weightings_b, weightings_b, cap_lambdas) {
   NoFiles <- length(unique(fileindex))
-  NoGroups <- length(unique(Group[[1]]))
+  Nogroups <- length(unique(group[[1]]))
 
   # Initialise first BootI for this loop to 1
-  BootI <- matrix(0, DSize)
+  BootI <- matrix(0, dsize)
   BootI[1] <- 1
 
   cat(".")
 
   # For each year
-  for (J in 2:DSize) {
-    # Make two matrices of 0s of size 1xNoGroups
-    D <- matrix(0, 1, NoGroups)
-    DI <- matrix(0, 1, NoGroups)
+  for (J in 2:dsize) {
+    # Make two matrices of 0s of size 1xNogroups
+    D <- matrix(0, 1, Nogroups)
+    DI <- matrix(0, 1, Nogroups)
 
     # For each file (population) in this file/set of species lambdas
     for (FileNo in 1:NoFiles) {
-      GroupNo <- Group[FileNo, 1]
+      groupNo <- group[FileNo, 1]
 
-      # Read SpeciesLambda from saved file FileName = paste('lpi_temp/SpeciesLambda',FileNo,sep='')
-      # SpeciesLambda = read.table(FileName, header = FALSE, sep=',')
-      SpeciesLambda <- SpeciesLambdaArray[fileindex == FileNo, J]
+      # Read speciesLambda from saved file FileName = paste('lpi_temp/speciesLambda',FileNo,sep='')
+      # speciesLambda = read.table(FileName, header = FALSE, sep=',')
+      speciesLambda <- species_lambda_array[fileindex == FileNo, J]
 
-      if (!is.null(SpeciesLambda)) {
+      if (!is.null(speciesLambda)) {
         # We shouldn't be sampling missing values....
-        SpeciesLambdaVal <- na.omit(SpeciesLambda)
+        speciesLambdaVal <- na.omit(speciesLambda)
 
         # Create sample with replacement (single bootstrap instance)
-        BootVal <- sample(SpeciesLambdaVal, replace = T)
+        BootVal <- sample(speciesLambdaVal, replace = T)
 
         # If we've got some meaningful data
-        if (!CAP_LAMBDAS) {
+        if (!cap_lambdas) {
           Index <- which(BootVal != -1)
         } else {
           Index <- which(!is.na(BootVal))
@@ -53,15 +53,15 @@ bootstrap_lpi <- function(SpeciesLambdaArray, fileindex, DSize, Group, Weighting
         if (length(Index) > 0) {
 
           # Store sum of mean lamdas in D (summing over species within group)
-          # D[Group[FileNo, 1]] = D[Group[FileNo, 1]] + mean(BootVal[Index])
+          # D[group[FileNo, 1]] = D[group[FileNo, 1]] + mean(BootVal[Index])
 
           if (use_weightings) {
-            D[GroupNo] <- D[GroupNo] + mean(BootVal[Index]) * Weightings[[1]][FileNo]
+            D[groupNo] <- D[groupNo] + mean(BootVal[Index]) * weightings[[1]][FileNo]
           } else {
-            D[GroupNo] <- D[GroupNo] + mean(BootVal[Index])
+            D[groupNo] <- D[groupNo] + mean(BootVal[Index])
           }
 
-          DI[GroupNo] <- DI[GroupNo] + 1
+          DI[groupNo] <- DI[groupNo] + 1
         }
       }
     }
@@ -82,20 +82,20 @@ bootstrap_lpi <- function(SpeciesLambdaArray, fileindex, DSize, Group, Weighting
     DT <- 0
     DI <- 0
     # Sum over groups
-    for (GroupNo in 1:NoGroups) {
+    for (groupNo in 1:Nogroups) {
       # CHANGED AS D CAN BE 0 I.E ZERO GROWTH (AVERAGED)
-      # if (D[GroupNo] != 0) {
-      if (use_weightings_B == 1) {
+      # if (D[groupNo] != 0) {
+      if (use_weightings_b == 1) {
         # Catch any groups which have no data.
-        if (!is.na(D[GroupNo])) {
-          DT <- DT + D[GroupNo] * WeightingsB[GroupNo]
+        if (!is.na(D[groupNo])) {
+          DT <- DT + D[groupNo] * weightings_b[groupNo]
           # DI = DI + 1
         }
         DI <- 1
       } else {
         # Catch any groups which have no data.
-        if (!is.na(D[GroupNo])) {
-          DT <- DT + D[GroupNo]
+        if (!is.na(D[groupNo])) {
+          DT <- DT + D[groupNo]
           DI <- DI + 1
         }
       }

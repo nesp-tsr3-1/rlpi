@@ -8,12 +8,12 @@
 summarise_lpi <- function(infile) {
   # Bit of a hack to avoid NOTE during R CMD check
   # Sets the variables used in ggplot2::aes to NULL
-  summarise <- Binomial <- year <- ID <- species <- pop <- duration <- nspecies <- minyear <- maxyear <- NULL
+  summarise <- Binomial <- year <- id <- species <- pop <- duration <- nspecies <- minyear <- maxyear <- NULL
 
   FileTable <- read.table(infile, header = TRUE)
   FileNames <- FileTable$FileName
-  Group <- FileTable[2]
-  NoFiles <- max(dim(Group))
+  group <- FileTable[2]
+  NoFiles <- max(dim(group))
 
   summary_data <- data.frame(filename = character(0), nyear = numeric(0), nsp = numeric(0), npop = numeric(0))
 
@@ -22,7 +22,7 @@ summarise_lpi <- function(infile) {
     Data <- read.table(filename, header = TRUE)
 
     nyear <- plyr::summarise(Data, nyear = length(unique(year)))
-    npop <- plyr::summarise(Data, npop = length(unique(ID)))
+    npop <- plyr::summarise(Data, npop = length(unique(id)))
     nsp <- plyr::summarise(Data, nsp = length(unique(Binomial)))
 
     summary_data <- rbind(summary_data, data.frame(filename = filename, nyear = nyear, nsp = nsp, npop = npop))
@@ -30,11 +30,11 @@ summarise_lpi <- function(infile) {
     pdf(file = paste(filename, ".summary.pdf", sep = ""), width = 16, height = 6)
 
 
-    npop_year <- plyr::ddply(Data, "year", plyr::summarise, nyear = length(unique(ID)))
+    npop_year <- plyr::ddply(Data, "year", plyr::summarise, nyear = length(unique(id)))
     colnames(npop_year) <- c("year", "npop")
     p1 <- ggplot2::ggplot(npop_year, ggplot2::aes(x = year, y = npop)) +
       ggplot2::geom_point(size = 4) +
-      ggplot2::xlab("Year") +
+      ggplot2::xlab("year") +
       ggplot2::ylab("Number of populations") +
       ggplot2::ggtitle("Number of populations per year") +
       ggplot2::scale_x_continuous(breaks = round(seq(min(as.numeric(npop_year$year)), max(as.numeric(npop_year$year)), by = 1), 1)) +
@@ -54,7 +54,7 @@ summarise_lpi <- function(infile) {
     colnames(nsp_year) <- c("year", "nspecies")
     p2 <- ggplot2::ggplot(nsp_year, ggplot2::aes(x = year, y = nspecies)) +
       ggplot2::geom_point(size = 4) +
-      ggplot2::xlab("Year") +
+      ggplot2::xlab("year") +
       ggplot2::ylab("Number of species") +
       ggplot2::ggtitle("Number of species per year") +
       ggplot2::scale_x_continuous(breaks = round(seq(min(nsp_year$year), max(nsp_year$year), by = 1), 1)) +
@@ -74,7 +74,7 @@ summarise_lpi <- function(infile) {
     colnames(nyear_sp) <- c("species", "nyear")
     p3 <- ggplot2::ggplot(nyear_sp, ggplot2::aes(x = reorder(species, nyear), y = nyear)) +
       ggplot2::geom_point(size = 2) +
-      ggplot2::xlab("Species") +
+      ggplot2::xlab("species") +
       ggplot2::ylab("Number of years") +
       ggplot2::ggtitle("Number of years per species") +
       # scale_x_continuous(breaks = round(seq(min(nsp_year$year), max(nsp_year$year), by = 1),1)) +
@@ -91,7 +91,7 @@ summarise_lpi <- function(infile) {
 
     write.table(nyear_sp[order(nyear_sp$nyear), ], file = paste(filename, ".nyear_sp.txt", sep = ""), row.names = FALSE)
 
-    nyear_pop <- plyr::ddply(Data, c("ID", "Binomial"), plyr::summarise, nyear = length(unique(year)))
+    nyear_pop <- plyr::ddply(Data, c("id", "Binomial"), plyr::summarise, nyear = length(unique(year)))
     colnames(nyear_pop) <- c("pop", "binomial", "nyear")
     p4 <- ggplot2::ggplot(nyear_pop, ggplot2::aes(x = reorder(pop, nyear), y = nyear)) +
       ggplot2::geom_point(size = 2) +
@@ -111,9 +111,9 @@ summarise_lpi <- function(infile) {
     write.table(nyear_pop[order(nyear_pop$nyear), ], file = paste(filename, ".nyear_pop.txt", sep = ""), row.names = FALSE)
 
     # Calculate min and max for each population/species
-    minpop_year <- plyr::ddply(Data, c("Binomial", "ID"), plyr::summarise, minyear = min(as.numeric(year)))
-    maxpop_year <- plyr::ddply(Data, c("Binomial", "ID"), plyr::summarise, maxyear = max(as.numeric(year)))
-    df <- merge(minpop_year, maxpop_year, by = c("Binomial", "ID"))
+    minpop_year <- plyr::ddply(Data, c("Binomial", "id"), plyr::summarise, minyear = min(as.numeric(year)))
+    maxpop_year <- plyr::ddply(Data, c("Binomial", "id"), plyr::summarise, maxyear = max(as.numeric(year)))
+    df <- merge(minpop_year, maxpop_year, by = c("Binomial", "id"))
     df$duration <- df$maxyear - df$minyear
 
 

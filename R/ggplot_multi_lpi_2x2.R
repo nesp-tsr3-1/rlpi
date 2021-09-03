@@ -40,7 +40,7 @@ ggplot_multi_lpi_2x2 <- function(lpis, names, title = "", col = "Blues") {
     ggplot2::scale_fill_manual(values = colours) +
     ggplot2::scale_color_manual(values = colours) +
     ggplot2::facet_grid(. ~ group) +
-    ggplot2::labs(aesthetic = "CPI Group") +
+    ggplot2::labs(aesthetic = "CPI group") +
     ggplot2::scale_x_continuous(breaks = as.numeric(df$years)[c(TRUE, rep(FALSE, yrbreaks - 1))]) +
     ggplot2::facet_wrap(~group, ncol = 2)
 }
