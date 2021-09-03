@@ -31,8 +31,9 @@ CalcSDev <- function(x, h, d, interval) {
   # to be a measurement of time; so in this function we have to divide by
   # (h*interval)^2 (see penultimate line of code where the adjustment by interval^2 is
   # made), instead of just by h^2.] d must be 2, 4 or 6 so check this
-  if (is.na(match(d, c(2, 4, 6))))
-    stop("d must be 2, 4 or 6.")  #
+  if (is.na(match(d, c(2, 4, 6)))) {
+    stop("d must be 2, 4 or 6.")
+  } #
   # now work out the vector of window sizes: at endpoints it is not possible to use
   # d=4 or d=6, or h>1, because there are insufficiently many points at the end of the
   # series to accommodate the larger windows required.  Thus whatever values were
@@ -41,17 +42,17 @@ CalcSDev <- function(x, h, d, interval) {
   # increase (if necessary) to its specified value, after which h is also allowed to
   # increase (if necessary) to its specified value.  The actual window sizes used for
   # every time point in the series are stored in vector hvec:
-  N <- length(x)  # x is recorded at N equally spaced points
-  hvec <- 1:(N/2)
-  hvec <- (hvec - 1)%/%(d/2)
+  N <- length(x) # x is recorded at N equally spaced points
+  hvec <- 1:(N / 2)
+  hvec <- (hvec - 1) %/% (d / 2)
   hvec[hvec > h] <- h
-  if (N%%2) {
+  if (N %% 2) {
     hvec <- c(hvec, max(hvec), rev(hvec))
   } else {
     # (N odd)
     hvec <- c(hvec, rev(hvec))
   }
-  hvec[hvec == 0] <- 1  #
+  hvec[hvec == 0] <- 1 #
   # similarly, dvec stores the actual values (2, 4, or 6) for the difference operator
   # d along the series:
   dvec <- rep(d, N)
@@ -61,22 +62,22 @@ CalcSDev <- function(x, h, d, interval) {
   } else if (d == 4) {
     dvec[c(2, N - 1)] <- 2
   }
-  dvec[c(1, N)] <- 0  #
+  dvec[c(1, N)] <- 0 #
   # Now code the various difference operators approximating 2nd derivative,
   # corresponding to d=2, 4, or 6.  xinds is the set of indices of x for which the
   # derivative is to be calculated (usually all those with d taking a certain value).
   # hvals are the h-values corresponding to those indices in xinds.
   diff.op2 <- function(xinds, hvals) {
-    (x[xinds + hvals] - 2 * x[xinds] + x[xinds - hvals])/hvals^2
+    (x[xinds + hvals] - 2 * x[xinds] + x[xinds - hvals]) / hvals^2
   }
   diff.op4 <- function(xinds, hvals) {
     (-x[xinds + 2 * hvals] + 16 * x[xinds + hvals] - 30 * x[xinds] + 16 * x[xinds -
-                                                                              hvals] - x[xinds - 2 * hvals])/(12 * hvals^2)
+      hvals] - x[xinds - 2 * hvals]) / (12 * hvals^2)
   }
   diff.op6 <- function(xinds, hvals) {
     (2 * x[xinds + 3 * hvals] - 27 * x[xinds + 2 * hvals] + 270 * x[xinds + hvals] -
-       490 * x[xinds] + 270 * x[xinds - hvals] - 27 * x[xinds - 2 * hvals] + 2 *
-       x[xinds - 3 * hvals])/(180 * hvals^2)
+      490 * x[xinds] + 270 * x[xinds - hvals] - 27 * x[xinds - 2 * hvals] + 2 *
+        x[xinds - 3 * hvals]) / (180 * hvals^2)
   }
 
   secderiv <- numeric(N)
@@ -88,6 +89,6 @@ CalcSDev <- function(x, h, d, interval) {
   secderiv[dvec == 4] <- diff.op4((1:N)[dvec == 4], hvec[dvec == 4])
   secderiv[dvec == 6] <- diff.op6((1:N)[dvec == 6], hvec[dvec == 6])
   # correct for interval^2 as described above:
-  SecDeriv <- secderiv/(interval^2)
+  SecDeriv <- secderiv / (interval^2)
   SecDeriv
 }

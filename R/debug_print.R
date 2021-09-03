@@ -7,6 +7,6 @@
 #'
 debug_print <- function(verbose = FALSE, text) {
   if (verbose) {
-    cat(paste("[debug] ", text, sep=""))
+    cat(paste("[debug] ", text, sep = ""))
   }
 }
