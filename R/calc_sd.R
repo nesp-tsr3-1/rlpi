@@ -1,4 +1,4 @@
-#' CalcSDev - Calculates the difference operator on vector x to give an approximate
+#' calc_sd - Calculates the difference operator on vector x to give an approximate
 #' second derivative curve for x.
 #'
 #' @param x the vector to calculate differences on
@@ -9,7 +9,7 @@
 #' @return Returns the approx second derivative of a curve for x
 #' @export
 #'
-CalcSDev <- function(x, h, d, interval) {
+calc_sd <- function(x, h, d, interval) {
   # diffop.func: Calculates the difference operator on vector x to give an approximate
   # second derivative curve for x.  h is the desired window size (see below).
   # Corresponds to the quantity r in eqns 9, 10, and 11 of the Ecology paper.  Usually

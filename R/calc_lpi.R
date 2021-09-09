@@ -1,3 +1,296 @@
+library(dplyr)
+
+#' calc_lpi - Main funciton for calculating species lamdbas (interannual changes). Input data is a series
+#' of 4-value rows: (species, id, year, popvalue). This function will model the species populations over time
+#' using either the chain method (log-linear interpolation) or Generalised Additive Modelling. See gam_global_flag
+#'
+#'
+#' @param species - Vector with name of species for each population value
+#' @param id - Vector of ids for each population value
+#' @param year - Vector of years for each population value
+#' @param popvalue - Vector of population values
+#' @param initial_year - Initial year to calculate the index from
+#' @param final_year - Final year to calculate the index to
+#' @param dataset_name - Name of the dataset that these value are from (for generating output files)
+#' @param model_selection_flag - Default=0
+#' @param gam_global_flag  - 1 = process by GAM method, 0 = process by chain method. Default=1
+#' @param data_length_min - Minimum data length to include in calculations. Default=2
+#' @param avg_time_between_pts_max - Maximum time between datapoint to include. Default=100
+#' @param global_gam_flag_short_data_flag - Set this to 1 GAM model is also to be generated for the short time series else the log linear model will be used. Default=0
+#' @param auto_diagnostic_flag - 1=Automatically determine whether GAM models are good enough, 0=Manually ask for each. Default=1
+#' @param lambda_min - Minimum lambda to include in calculations. Default=1
+#' @param lambda_max - Minimum lambda to include in calculations. Default=-1
+#' @param zero_replace_flag - 0 = +minimum value; 1 = +1\% of mean value; 2 = +1. Default=2 Only for time-series that contain 0 values
+#' @param offset_all - 1 = Add offset to all values in all time-series, to avoid log(0). Default=0
+#' @param offset_none=FALSE - Does nothing (leaves 0 unaffected **used for testing will break if there are 0 values in the source data **)
+#' @param offset_diff=FALSE - Offset time-series with 0 values adding 1\% of mean if max value in time-series<1 and 1 if max>=1
+#' @param linear_model_short_flag - If=TRUE models short time-series with linear model
+#' @return - Returns the species lambda array for the input species
+#' @export
+#'
+calc_lpi <- function(species,
+                    id,
+                    year,
+                    popvalue,
+                    initial_year,
+                    final_year,
+                    dataset_name,
+                    model_selection_flag, # determines whether we approve the models or the code does it automatically
+                    gam_global_flag, # 1 = process by GAM method, 0 = process by chain method
+                    data_length_min,
+                    avg_time_between_pts_max,
+                    global_gam_flag_short_data_flag, # set this if GAM model is also to be generated for the short time series else the log linear model will be used.
+                    auto_diagnostic_flag, # is about how the smoothing parameter is chosen
+                    lambda_min,
+                    lambda_max,
+                    zero_replace_flag, # 0 = +minimum value; 1 = +1% of mean value; 2 = +1
+                    offset_all, # Add offset to all values, to avoid log(0)
+                    offset_none, # Does nothing (leaves 0 unaffected **used for testing will break if there are 0 values in the source data **)
+                    offset_diff, # Offset time-series with 0 values adding 1% of mean if max value in time-series<1 and 1 if max>=1
+                    linear_model_short_flag, # if=TRUE models short time-series with linear model
+                    cap_lambdas = FALSE,
+                    show_progress = FALSE,
+                    basedir = ".") {
+  legacy_mode = TRUE
+
+  cat(sprintf("Number of species: %s (in %s populations)\n", length(unique(species)), length(unique(id))))
+
+  offset_all <- as.logical(offset_all)
+  offset_none <- as.logical(offset_none)
+  offset_diff <- as.logical(offset_diff)
+
+  df <- data.frame(species, id, year, popvalue)
+
+  d <- df %>%
+    mutate(i = row_number()) %>%
+    group_by(species) %>%
+    mutate(species_index = min(i)) %>%
+    group_by(species, id) %>%
+    mutate(
+      pop_index = min(i),
+      year_count = n(),
+      year_span = max(year) - min(year),
+      avg_time_between_pts = year_span / n(),
+      min_value = min(popvalue),
+      max_value = max(popvalue),
+      has_zero = any(popvalue == 0)) %>%
+    filter(n() >= data_length_min & avg_time_between_pts < avg_time_between_pts_max) %>%
+    # note: species_index and pop_index are used to control result ordering
+    group_by(species_index, pop_index, species, id) %>%
+    mutate(
+      offset = case_when(
+        offset_all ~
+          1,
+        offset_none & any(popvalue == 0) ~ # ISSUE: contrary to documentation
+          1e-17,
+        offset_none ~
+          0,
+        offset_diff & any(popvalue == 0) & mean(popvalue) == 0 ~
+          1e-17,
+        offset_diff & any(popvalue == 0) & max(popvalue) >= 1 ~
+          1,
+        offset_diff & any(popvalue == 0) ~
+          mean(popvalue[popvalue != 0]) * 0.01,
+        !any(popvalue == 0) ~
+          0,
+        zero_replace_flag == 1 & mean(popvalue) == 0 ~ # ISSUE: 'zero replacement' still just seems to be an offset
+          1e-17,
+        zero_replace_flag == 1 ~
+          mean(popvalue[popvalue != 0]) * 0.01,
+        zero_replace_flag == 2 & mean(popvalue) == 0 ~
+          1e-17,
+        zero_replace_flag == 2 ~
+          1,
+        TRUE ~
+          min(popvalue[popvalue != 0]) * (popvalue == 0)
+      ),
+      popvalue = popvalue + offset
+    ) %>%
+    summarise(
+      x = (function() {
+        # print(paste(min(species), min(id)))
+        cat(".")
+        model <- NULL
+        model_approved <- FALSE
+
+        if(legacy_mode) {
+          # ISSUE: original check for constant popvalue is dodgy
+          popvalue_is_constant <- mean(popvalue) != popvalue[1]
+        } else {
+          popvalue_is_constant <- var(popvalue) == 0
+        }
+
+        if (gam_global_flag == 1 & popvalue_is_constant) {
+          smooth_parm <- round(n() / 2)
+          if (smooth_parm >= 3) {
+            model <- mgcv::gam(log(popvalue) ~ s(year, k = smooth_parm), fx = TRUE)
+
+            if (auto_diagnostic_flag == 1) {
+              rsd <- residuals(model)
+              modelres <- mgcv::gam(rsd ~ s(year, k = n(), bs = "cs"), gamma = 1.4)
+              model_approved <- abs(sum(modelres$edf) - 1) < 0.01
+            } else {
+              summary(model)
+              readline(prompt = "Press any key to continue")
+              plot(model,
+                pages = 1, residuals = TRUE, all.terms = TRUE, shade = TRUE,
+                shade.col = 2
+              )
+              readline(prompt = "Press any key to continue")
+              mgcv::gam.check(model)
+              Char <- readline(prompt = "Press 'Y' to accept model, 'N' to reject GAM model and use default method")
+              while ((Char != "Y") & (Char != "N")) {
+                Char <- readline(prompt = "Press 'Y' to accept model, 'N' to reject GAM model and use default method")
+              }
+              model_approved <- Char == "Y"
+            }
+          }
+        }
+
+        filled_year <- min(year):max(year)
+        if (model_approved) {
+          p <- predict(model, data.frame(year = filled_year))
+          popint <- exp(unname(p))
+        } else {
+          # 'chain' method interpolation
+          temp <- merge(
+            data.frame(year = year, popvalue = popvalue),
+            data.frame(year = filled_year),
+            all=TRUE) %>%
+            mutate(
+              pa = popvalue,
+              pb = popvalue,
+              ia = popvalue * 0 + row_number(),
+              ib = popvalue * 0 + row_number()) %>%
+            tidyr::fill(pa, ia, .direction = "down") %>%
+            tidyr::fill(pb, ib, .direction = "up") %>%
+            mutate(p = pa * ((pb / pa)^((row_number() - ia) / (ib - ia))))
+          popint <- temp$p
+        }
+
+        popint <- case_when(
+          all(popint == 0) | all(popint > 0) ~
+            popint,
+          zero_replace_flag == 1 ~
+            popint + mean(popint[popint > 0]) * 0.01,
+          TRUE ~
+            popint + min(popint[popint > 0]))
+
+        popint <- (merge(
+          data.frame(
+            year = filled_year,
+            p = ifelse(popint == 0, NA, log10(popint))),
+          data.frame(year = initial_year:final_year),
+          all.y = TRUE)$p)
+
+        if(legacy_mode) {
+          # ISSUE: this is actually a bug in the original implementation.
+          # The original implementation uses -1 to indicate missing data, however
+          # there can actually be legitimate -1 values at this point.
+          # So to remain compatible we have to replace -1 values with NA.
+          popint[popint == -1] <- NA
+        }
+
+        poplambda <- c(1,diff(popint)) %>% tidyr::replace_na(-1)
+
+        data.frame(
+          year = initial_year:final_year,
+          popint,
+          poplambda
+        )
+      })()
+    ) %>%
+    ungroup() %>%
+    transmute(species, id, year = x$year, popint = x$popint, poplambda = x$poplambda)
+
+  write.table(unique(species), file = file.path(basedir, "lpi_temp", "SpeciesName.txt"), quote = FALSE)
+
+  # Export population lambdas
+
+  d %>%
+    tidyr::pivot_wider(id_cols = c(species, id), names_from = year, values_from = poplambda) %>%
+    select(-species) %>%
+    rename(population_id = id) %>%
+    write.table(
+      file = file.path(basedir, gsub(".txt", "_PopLambda.txt", dataset_name)),
+      sep = ",",
+      eol = "\n",
+      quote = FALSE,
+      col.names = FALSE,
+      row.names = FALSE,
+      append = TRUE)
+
+  splambda <- d %>%
+    group_by(species, year) %>%
+    summarise(
+      splambda = (function() {
+        p <- poplambda
+        p[p == -1] <- NA
+
+        if (legacy_mode) {
+          p2 <- p[!is.na(p)]
+          # ISSUE: legacy behaviour is buggy when all values lie outside of interval (lambda_min,lambda_max)
+          if (length(p2) == 0) {
+            return(NA)
+          } else if(any(p2 > lambda_max) & any(p2 < lambda_min) & all(p2 > lambda_max | p2 < lambda_min)) {
+            if(cap_lambdas) {
+              return(lambda_min)
+            } else {
+              return(NA)
+            }
+          }
+          # ISSUE: Legacy behaviour ignores values equal to lambda_min or lambda_max
+          # if some values fall between lambda_min and lambda_min
+          if(any(p2 < lambda_max & p2 > lambda_min)) {
+            p[p == lambda_max | p == lambda_min] <- NA
+          }
+        }
+
+        if(cap_lambdas) {
+          p[p > lambda_max] <- lambda_max
+          p[p < lambda_min] <- lambda_min
+        } else {
+          p[p >= lambda_max] <- NA
+          p[p <= lambda_min] <- NA
+        }
+        p <- mean(p, na.rm = TRUE)
+        p[is.nan(p)] <- NA
+        p
+      })())
+
+  # Export species lambdas
+
+  splambda_wide <- splambda %>%
+    tidyr::pivot_wider(id_cols = c(species), names_from = year, values_from = splambda)
+
+  # Ensure that all species are included and that species ordering is preserved
+  splambda_wide <- merge(
+    data.frame(species = unique(df$species)),
+    splambda_wide,
+    all = TRUE,
+    sort = FALSE)
+
+  splambda_wide %>%
+    rename(Species = species) %>%
+    write.table(
+      file = file.path(basedir, gsub(".txt", "_Lambda.txt", dataset_name)),
+      sep = ",",
+      eol = "\n",
+      quote = FALSE,
+      col.names = TRUE,
+      row.names = FALSE)
+
+  splambda_matrix <- splambda_wide %>%
+    select(-species) %>%
+    as.matrix()
+
+  return(splambda_matrix)
+}
+
+
+###############################
+
+
 #' CalcLPI - Main funciton for calculating species lamdbas (interannual changes). Input data is a series
 #' of 4-value rows: (species, id, year, popvalue). This function will model the species populations over time
 #' using either the chain method (log-linear interpolation) or Generalised Additive Modelling. See gam_global_flag
@@ -26,7 +319,7 @@
 #' @return - Returns the species lambda array for the input species
 #' @export
 #'
-CalcLPI <- function(species,
+calc_lpi_old <- function(species,
                     id,
                     year,
                     popvalue,

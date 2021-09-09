@@ -3,11 +3,11 @@
 #' @details
 #'
 #' # Calculate an index using the population file specified in GlobalInFile.txt, calculating confidence intervals using 100 bootstraps
-#' lpi_global <- LPIMain("GlobalInfile.txt", ci_flag=1, title="Global LPI", boot_strap_size=100)
+#' lpi_global <- lpi_main("GlobalInfile.txt", ci_flag=1, title="Global LPI", boot_strap_size=100)
 #' # Plot this global LPI
 #' ggplot_lpi(lpi_global)
 #' # Calculate an index using the population file specified in TropicalInfile.txt, calculating confidence intervals using 100 bootstraps
-#' lpi_tropical <- LPIMain("TropicalInfile.txt", ci_flag=1, title="Tropical LPI", boot_strap_size=100)
+#' lpi_tropical <- lpi_main("TropicalInfile.txt", ci_flag=1, title="Tropical LPI", boot_strap_size=100)
 #' # Plot this tropical LPI
 #' ggplot_lpi(lpi_tropical)
 #' # Plot them together
@@ -53,13 +53,13 @@
 #'
 #' # Terrestrial LPI with equal weighting across classes and realms
 #' # Default gives 100 boostraps (this will take a few minutes to run (on a 2014 Macbook))
-#' terr_lpi <- LPIMain("terrestrial_class_realms_infile.txt")
+#' terr_lpi <- lpi_main("terrestrial_class_realms_infile.txt")
 #'
 #' # Nicer plot
 #' ggplot_lpi(terr_lpi)
 #'
 #' # Run same again, but used cached lambdas (force_recalculation == 0), and now weighted by class, but equal across realms (see infile for weights)
-#' terr_lpi_b <- LPIMain("terrestrial_class_realms_infile.txt", force_recalculation = 0, use_weightings = 1)
+#' terr_lpi_b <- lpi_main("terrestrial_class_realms_infile.txt", force_recalculation = 0, use_weightings = 1)
 #'
 #' # Putting the two LPIs together in a list
 #' lpis <- list(terr_lpi, terr_lpi_b)
@@ -74,7 +74,7 @@
 #' @export
 #'
 #'
-LPIMain <- function(infile = "Infile.txt",
+lpi_main <- function(infile = "Infile.txt",
                     basedir = ".",
                     ref_year = 1970,
                     plot_max = 2017,
@@ -89,7 +89,7 @@ LPIMain <- function(infile = "Infile.txt",
                     save_plots = 1,
                     plot_lpi = 1,
                     go_parallel = FALSE,
-                    # CalcLPI options...
+                    # calc_lpi options...
                     model_selection_flag = 0,
                     gam_global_flag = 1, # 1 = process by GAM method, 0 = process by chain method
                     data_length_min = 2,
@@ -98,7 +98,7 @@ LPIMain <- function(infile = "Infile.txt",
                     auto_diagnostic_flag = 1,
                     lambda_min = -1,
                     lambda_max = 1,
-                    zero_replace_flag = 1, # 0 = +minimum value; 1 = +1% of mean value; 2 = +1
+                    zero_replace_flag = 1, # 0 = +avg_time_between_pts_maximum value; 1 = +1% of mean value; 2 = +1
                     offset_all = 0, # Add offset to all values, to avoid log(0)
                     offset_none = FALSE, # Does nothing (leaves 0 unaffected **used for testing will break if there are 0 values in the source data **)
                     offset_diff = FALSE, # Offset time-series with 0 values adding 1% of mean if max value in time-series<1 and 1 if max>=1
@@ -106,6 +106,7 @@ LPIMain <- function(infile = "Infile.txt",
                     cap_lambdas = TRUE,
                     verbose = TRUE,
                     show_progress = TRUE) {
+  set.seed(4)
 
   # Start timing
   ptm <- proc.time()
@@ -125,68 +126,71 @@ LPIMain <- function(infile = "Infile.txt",
   }
 
   # RF: Get list of input files
-  FileTable <- read.table(infile, header = TRUE)
+  file_table <- read.table(infile, header = TRUE)
+
+  # Rename columns to match naming conventions
+  ft = data.frame(
+    file_name = file_table$FileName,
+    group = file_table$Group,
+    weighting = file_table$Weighting
+  )
+
+  if (!is.null(file_table$WeightingB)) {
+    ft$weighting_b <- file_table$WeightingB
+  }
+
   # RF: Get names from file
-  FileNames <- FileTable$FileName
+  FileNames <- file_table$FileName
   # Get groups from file as column vector
-  group <- FileTable[2]
+  group <- file_table[2]
 
   groupList <- unique(group[[1]])
 
-  # print(group)
-
-  weightings <- FileTable[3]
-
-  # RF: Get weightings from file
   if (use_weightings == 1) {
-    weightingsA <- FileTable[3]
+    ft$old_weighting <- ft$weighting
 
-    # weightings = weightings/sum(weightings)
-    cat(sprintf("weightings...\n"))
+    # Normalise weightings by group
+    ft$weighting <- ave(ft$weighting, ft$group, FUN = function(x) x / sum(x))
 
-    # Make sure group weightings normalise
-    for (i in 1:length(groupList)) {
-      print(paste("group:", groupList[i]))
+    # Output weightings in original format:
+    print("weightings...")
+
+    for (g in unique(ft$group)) {
+      print(paste("group:", g))
       cat("\t")
-      print(weightings[group == groupList[i]])
+      print(ft$old_weighting[ft$group == g])
       cat("\t")
       print("Normalised weights (sum to 1)")
-      weightings[group == groupList[i]] <- weightings[group == groupList[i]] / sum(weightings[group == groupList[i]])
       cat("\t")
-      print(weightings[group == groupList[i]])
+      print(ft$weighting[ft$g == g])
     }
     cat("\n")
   }
 
+  weightings <- ft['weighting']
+
   if (use_weightings_b == 1) {
+    if (is.null(ft$weighting_b)) {
+      stop("WeightingB values not specified, but use_weightings_b = 1")
+    }
+
+    if (nrow(unique(cbind(ft$group, ft$weighting_b))) != length(unique(ft$group))) {
+      stop("Problem with infile: different WeightingB values found within a group")
+    }
+
     # RF: Get weightings from file
-    Fileweightings_b <- FileTable[4]
-    weightings_b <- unique(cbind(group, Fileweightings_b))$WeightingB
-    # weightings_b = weightings_b/sum(weightings_b)
-    cat(sprintf("weightings_b...\n"))
+    weightings_b <- unique(cbind(ft$group, ft$weighting_b))[,2]
+
+    cat("weightings_b...\n")
     print(weightings_b)
     cat("\n")
   }
 
+  cat("Number of groups: ", length(unique(ft$group)), "\n")
 
-  # Find max of group to get number of groups
-  Nogroups <- length(unique(group[[1]]))
+  NoFiles <- nrow(ft)
 
-  cat("Number of groups: ", Nogroups, "\n")
-
-  # ci_flag and the Switchpointflag were here
-
-  # Number of files is the size of the maximum dimension of group
-  NoFiles <- max(dim(group))
-
-  # dsize = 0
-  # Create empty matrix to store size of lambdas (number of years) for each species
-  # dsizes = matrix(0, ncol=10)
-
-  # writeLines(c(""), "progress_log_files.txt")
-
-  # dsizes <- foreach (FileNo = 1:NoFiles,.combine=cbind) %dopar% {
-  dsizes <- foreach::foreach(FileNo = 1:NoFiles, .combine = cbind) %op% {
+  foreach::foreach(FileNo = 1:NoFiles, .combine = cbind) %op% {
     # sink("progress_log_files.txt", append=TRUE)
     # Check MD5 here to see if file already processed:
     md5val <- tools::md5sum(toString(FileNames[FileNo]))
@@ -195,10 +199,10 @@ LPIMain <- function(infile = "Infile.txt",
         (!file.exists(file.path(basedir, "lpi_temp", paste0(md5val, "_dtemp.csv")))) ||
         (!file.exists(file.path(basedir, "lpi_temp", paste0(md5val, "_splambda.csv"))))
     ) {
-      # dsizes[FileNo] = ProcessFile(toString(FileNames[FileNo]), FileNo)
+      # dsizes[FileNo] = process_file(toString(FileNames[FileNo]), FileNo)
       cat(sprintf("processing file: %s\n", toString(FileNames[FileNo])))
 
-      ProcessFile(
+      process_file(
         dataset_name = toString(FileNames[FileNo]),
         ref_year = ref_year,
         model_selection_flag = model_selection_flag,
@@ -524,7 +528,7 @@ LPIMain <- function(infile = "Infile.txt",
       h <- 1
       d <- 6
       interval <- 1
-      SecDeriv <- CalcSDev(I, h, d, interval)
+      SecDeriv <- calc_sd(I, h, d, interval)
       SecondDerivBoot[Loop, ] <- SecDeriv
 
       setTxtProgressBar(sp_prog, Loop)
@@ -603,11 +607,11 @@ LPIMain <- function(infile = "Infile.txt",
   # create minmax file
 
   # RF: Get list of input files
-  FileTable <- read.table(infile, header = TRUE)
+  file_table <- read.table(infile, header = TRUE)
   # RF: Get names from file
-  FileNames <- FileTable$FileName
+  FileNames <- file_table$FileName
   # Get groups from file as column vector
-  group <- FileTable[2]
+  group <- file_table[2]
   # Find max of group to get number of groups
   # Nogroups = max(group)
   Nogroups <- length(unique(group))

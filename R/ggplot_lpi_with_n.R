@@ -9,7 +9,7 @@
 #' @return Returns the calculated plot
 #' @export
 #'
-ggplot_lpi_withN <- function(d, col = "black", title = "", y_min = 0, y_max = 2) {
+ggplot_lpi_with_n <- function(d, col = "black", title = "", y_min = 0, y_max = 2) {
 
   # Bit of a hack to avoid NOTE during R CMD check
   # Sets the variables used in ggplot2::aes to NULL
