@@ -153,19 +153,16 @@ calc_lpi <- function(species,
           popint <- exp(unname(p))
         } else {
           # 'chain' method interpolation
-          temp <- merge(
-            data.frame(year = year, popvalue = popvalue),
-            data.frame(year = filled_year),
-            all=TRUE) %>%
-            mutate(
-              pa = popvalue,
-              pb = popvalue,
-              ia = popvalue * 0 + row_number(),
-              ib = popvalue * 0 + row_number()) %>%
-            tidyr::fill(pa, ia, .direction = "down") %>%
-            tidyr::fill(pb, ib, .direction = "up") %>%
-            mutate(p = pa * ((pb / pa)^((row_number() - ia) / (ib - ia))))
-          popint <- temp$p
+          p <- filled_year * NA
+          p[year - min(year) + 1] <- popvalue
+          i <- 1:length(p) + p * 0
+
+          ia <- data.table::nafill(i,type="locf")
+          ib <- data.table::nafill(i,type="nocb")
+          pa <- data.table::nafill(p,type="locf")
+          pb <- data.table::nafill(p,type="nocb")
+
+          popint <- pa * ((pb / pa)^((1:length(pa) - ia) / (ib - ia)))
         }
 
         popint <- case_when(
@@ -176,12 +173,12 @@ calc_lpi <- function(species,
           TRUE ~
             popint + min(popint[popint > 0]))
 
-        popint <- (merge(
-          data.frame(
-            year = filled_year,
-            p = ifelse(popint == 0, NA, log10(popint))),
-          data.frame(year = initial_year:final_year),
-          all.y = TRUE)$p)
+        n_years <- final_year - initial_year + 1
+        popint <- c(popint, rep(NA, n_years))
+        popint <- data.table::shift(popint, min(year) - initial_year)
+        popint <- head(popint, n_years)
+
+        popint <- ifelse(popint == 0, NA, log10(popint))
 
         if(legacy_mode) {
           # ISSUE: this is actually a bug in the original implementation.
