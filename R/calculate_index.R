@@ -13,7 +13,28 @@
 #' @export
 #'
 calculate_index <- function(dtemp_array, fileindex, dsize, group, weightings, use_weightings, use_weightings_b, weightings_b) {
-  # calculate LPI
+  d <- data.frame(dtemp_array, fileindex = unique(fileindex)) %>%
+    mutate(group = group[fileindex, 1]) %>%
+    tidyr::pivot_longer(cols = starts_with("X"), names_to="year", values_to="d") %>%
+    mutate(year = as.integer(substring(year, 2))) %>%
+    filter(year > 1 & !is.na(d) & d != -99) %>%
+    group_by(year, group) %>%
+    summarise(d = ifelse(use_weightings, sum(d * weightings[fileindex, 1]), mean(d))) %>%
+    group_by(year) %>%
+    summarise(d = ifelse(use_weightings_b, sum(d * weightings_b[group, 1]), mean(d)))
+
+  d2 <- rep(NA, dsize - 1)
+  d2[d$year - 1] <- d$d
+
+  d2 <- d2 %>%
+    purrr::accumulate(function(a, x) { ifelse(is.na(a), 1, a) * 10^x }, .init = 1) %>%
+    replace(is.na(.), -99)
+
+  return(d2)
+}
+
+calculate_index_old <- function(dtemp_array, fileindex, dsize, group, weightings, use_weightings, use_weightings_b, weightings_b) {
+#   # calculate LPI
 
   NoFiles <- length(unique(fileindex))
   Nogroups <- length(unique(group[[1]]))
