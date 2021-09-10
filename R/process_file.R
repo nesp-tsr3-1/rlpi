@@ -79,8 +79,6 @@ process_file <- function(dataset_name,
 
   # Save species Lambda matrix into a file
 
-  print("Writing _splambda.csv")
-
   data_file_name <- file.path(basedir, "lpi_temp", paste0(md5val, "_splambda.csv"))
   cat(sprintf("Saving species lambda to file: %s\n", data_file_name))
 
@@ -100,43 +98,17 @@ process_file <- function(dataset_name,
   cat(sprintf("Saving species lambda to file: %s\n", data_file_name))
   write.table(sorted_lambdas_count, data_file_name, sep = ",", col.names = NA)
 
-  # rm(speciesSSet, idSSet, yearSSet, popvalueSSet)
-
   cat("Calculating DTemp\n")
-  DTemp <- matrix(0, 1, dim(speciesLambda)[2])
-  # For each year
-  for (I in 1:dim(speciesLambda)[2]) {
-    # Get data for this year 'I'
-    yearData <- speciesLambda[, I]
 
-    # Find populations that have data
-    if (!cap_lambdas) {
-      Index <- which(yearData != -1)
-    } else {
-      Index <- which(!is.na(yearData))
-    }
-
-    # If there are some populations
-    if (length(Index) > 0) {
-      # DTemp is mean lambda for those populations
-      DTemp[I] <- mean(yearData[Index])
-      # Otherwise -99
-    } else {
-      DTemp[I] <- -99
-    }
-  }
-
+  DTemp <- colMeans(speciesLambda, na.rm = TRUE)
+  DTemp[is.nan(DTemp)] <- -99
+  DTemp <- matrix(DTemp, nrow = 1, dimnames = list(1, names(DTemp)))
 
   # JW: we are just saving the same file twice in different places.
   # Is one for diagnostic purposes and the other caching?
 
   data_file_name <- file.path(basedir, "lpi_temp", paste0(md5val, "_dtemp.csv"))
-
   cat("Saving DTemp to file: ", data_file_name, "\n")
-  # write.table(DTemp, data_file_name, sep = ",", col.names = FALSE, row.names = FALSE)
-
-  colnames(DTemp) <- initial_year:final_year
-
   write.table(DTemp, data_file_name, sep = ",", row.names = FALSE)
 
   data_file_name <- file.path(basedir, gsub(".txt", "_dtemp.csv", dataset_name))
