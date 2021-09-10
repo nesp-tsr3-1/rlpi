@@ -23,6 +23,40 @@ bootstrap_lpi <- function(
   use_weightings_b,
   weightings_b,
   cap_lambdas) {
+  num_groups <- length(unique(group[[1]]))
+
+  d <- data.frame(species_lambda_array, fileindex) %>%
+    mutate(
+      group = group[fileindex, 1],
+      i = row_number()
+    ) %>%
+    tidyr::pivot_longer(cols = starts_with("V"), names_to="year") %>%
+    mutate(year = as.integer(substring(year, 2))) %>%
+    filter(year > 1 & !is.na(value)) %>%
+    group_by(year, fileindex, group) %>%
+    summarise(d = mean(sample(value, replace = TRUE))) %>%
+    group_by(year, group) %>%
+    summarise(d = ifelse(use_weightings, sum(d * weightings[fileindex, 1]), mean(d))) %>%
+    group_by(year) %>%
+    # ISSUE: maybe sum(d)/num_groups should be mean(d)
+    summarise(d = ifelse(use_weightings_b, sum(d * weightings_b[group, 1]), sum(d) / num_groups)) %>%
+    .$d
+
+  d <- purrr::accumulate(d, function(a, x) { ifelse(is.na(a), 1, a) * 10^x }, .init = 1)
+
+  return(d)
+}
+
+bootstrap_lpi_old <- function(
+  species_lambda_array,
+  fileindex,
+  dsize,
+  group,
+  weightings,
+  use_weightings,
+  use_weightings_b,
+  weightings_b,
+  cap_lambdas) {
   no_files <- length(unique(fileindex))
   no_groups <- length(unique(group[[1]]))
 
